@@ -59,7 +59,7 @@ Dataset and copy it in from `/kaggle/input/<dataset-name>/`.""",
     ),
     (
         "code",
-        """REPO_URL = 'https://github.com/<your-org>/ARC-AGI-2.git'  # TODO: replace
+        """REPO_URL = 'https://github.com/zhanggangyi1224/ARC-AGI-2.git'
 WORK = '/kaggle/working'
 import os, subprocess
 os.chdir(WORK)
