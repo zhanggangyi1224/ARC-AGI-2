@@ -52,7 +52,7 @@ If we switch, the Kaggle pipeline, eval harness, team workflow, and results log 
 
 - **The Mac is the cockpit, not the engine.** Use it for: the eval harness, augmentation/data pipeline, results log, light local inference (MLX or llama.cpp; quantized models fit easily in 64GB).
 - **Do NOT** run the CUDA TTT stack on Metal — `unsloth`, `vLLM`, `bitsandbytes` 4-bit, `flash-attention` are CUDA-only or poorly supported on MPS. Trying to make them work locally is a time sink. Don't.
-- **Happy exception:** **TRM (~7M params)** is small enough to *train* locally via MLX or PyTorch-MPS. Good fit for our hardware and skill profile.
+- **TRM (~7M params)** is small at *inference* — MPS can run it (slowly: rough estimate ~20–60h for full public_eval × 1000-augment voting; use for small-subset smoke tests, not full repros). **Training TRM from scratch at ARC-AGI-2 scale is NOT Mac-feasible** — the paper used 4× H100 × ~3 days; the published [verification checkpoint](https://huggingface.co/arcprize/trm_arc_prize_verification) used 1× 8-H100 node × 20–30h. We reproduce via that checkpoint, not by retraining.
 - **Dev-time training:** Use Kaggle's free GPU notebooks (separate from the submission) or a cheap rented GPU (Colab / RunPod / Lambda). **Pin versions** so "works on my Mac" == "works in eval."
 - **Storage:** 2TB is a non-issue; ARC data is tiny and checkpoints are small.
 - **Method steer:** Hardware + the 12h/1-GPU envelope both point to the **lean end** — TRM-style or a single small-model TTT, not a heavy ensemble we couldn't submit anyway.
@@ -61,12 +61,17 @@ If we switch, the Kaggle pipeline, eval harness, team workflow, and results log 
 
 ## 5. Approach
 
-Dominant winning pattern is **test-time training (TTT)**: take the task's own demo pairs → generate augmented variants (rotations, reflections, color permutations) → fine-tune a small model at inference → generate many candidate outputs → vote/select the 2 submissions. Most leverage is pipeline engineering (augmentation quality, selection/voting, staying in budget), which suits us; pushing the training loop past a fork needs the ML half.
+Two related-but-distinct winning patterns in 2025:
+
+- **Test-time training (TTT)** (NVARC, MindsAI): start from a pretrained small LLM, fine-tune it *at inference* on the task's demo pairs and augmented variants, sample many candidates, vote.
+- **Recursive reasoning at inference** (TRM): conventionally pretrain a small (~7M) network on ARC training+concept data; at inference, the model recursively refines its predicted output over K steps (ACT-halted) against a large bank of augmented variants of the test input, then content-hash-votes the top-2. **Not** TTT — no per-task gradient updates.
+
+Most leverage in either is pipeline engineering (augmentation quality, selection/voting, staying in budget), which suits us; pushing the training loop past a fork needs the ML half.
 
 **Start simplest:** fork ONE credible baseline and reproduce its score before changing anything. Candidates:
-- **TRM** (2025 paper winner) — ~7M params, no pretraining, trains at test time. Smallest, most tractable, Mac-trainable. **Recommended starting point.**
-- **NVARC** (2025 1st) — TTT + TRM ensemble; open code + paper.
-- **MindsAI** (2025 3rd) — engineered TTT pipeline; open code + paper.
+- **TRM** (2025 paper winner) — pretrained recursive-reasoning model, ~7M params. We use the published MIT-licensed verification checkpoint (`huggingface.co/arcprize/trm_arc_prize_verification`) rather than retraining from scratch. **Recommended starting point** — smallest blast radius, cleanest reproduction path.
+- **NVARC** (2025 1st) — TTT on top of a TRM-class model; open code + paper.
+- **MindsAI** (2025 3rd) — engineered TTT pipeline on top of a small LLM; open code + paper.
 
 **Reproduce before you innovate.** This is the single biggest separator between teams that climb and teams that thrash.
 
