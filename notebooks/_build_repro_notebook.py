@@ -94,7 +94,15 @@ point), and `triton` (preinstalled with torch on Kaggle).""",
 
 This builds `data/arc2concept-aug-1000/{train,test}/` with the **same**
 identifier_map the verification checkpoint was trained against. We call the
-preprocessor directly (no CLI) so we don't need `argdantic`.""",
+preprocessor directly (no CLI) so we don't need `argdantic`.
+
+**Heads up — expected output, NOT errors:** You'll see many lines of
+`[Puzzle <id>] augmentation not full, only NNN`. That's TRM's preprocessor
+saying "this puzzle has too much symmetry to generate 1000 unique
+augmentations; we kept the NNN unique ones." Common for mostly-blank or
+single-color puzzles. **Do NOT interrupt** — let it finish; runtime is
+roughly **5–20 min on Kaggle CPU** for ~1280 puzzles. Cell is done when
+you see `Total puzzles: ...` and the `!ls` at the end of the cell prints.""",
     ),
     (
         "code",
