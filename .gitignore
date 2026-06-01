@@ -14,6 +14,12 @@ runs/
 experiments/*/checkpoints/
 experiments/*/logs/
 
+# Vendored TRM may write training artifacts here when run locally; never track
+src/solver/trm/wandb/
+src/solver/trm/checkpoints/
+src/solver/trm/outputs/
+src/solver/trm/data/
+
 # Notebooks
 .ipynb_checkpoints/
 *.ipynb_checkpoints
