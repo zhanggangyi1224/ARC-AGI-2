@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ARC data and run artifacts (kept out of git; reproducible from data source + configs)
+data/
+runs/
+experiments/*/checkpoints/
+experiments/*/logs/
+
+# Notebooks
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Local env files
+.env
+.env.local
