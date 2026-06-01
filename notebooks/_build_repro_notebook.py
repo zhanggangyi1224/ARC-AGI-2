@@ -78,7 +78,7 @@ point), and `triton` (preinstalled with torch on Kaggle).""",
     ),
     (
         "code",
-        """!pip install -q einops 'pydantic>=2' pyyaml numba""",
+        """!pip install -q einops 'pydantic>=2' pyyaml numba argdantic coolname""",
     ),
     (
         "markdown",
