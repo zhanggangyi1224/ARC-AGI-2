@@ -137,7 +137,7 @@ def _to_device(batch: dict[str, torch.Tensor], device: torch.device) -> dict[str
 
 
 def _run_inference(
-    model: nn.Module,
+    model: nn.Module,  # the ACTLossHead-wrapped model
     data_path: Path,
     eval_metadata: PuzzleDatasetMetadata,
     device: torch.device,
@@ -165,7 +165,14 @@ def _run_inference(
         aggregated_voting=True,
     )
     evaluator.begin_eval()
-    required_outputs = evaluator.required_outputs
+
+    # Skip the ACTLossHead — at inference we want neither loss computation
+    # nor the fp64 upcast in stablemax_cross_entropy (that's what blew the
+    # T4 OOM at batch=768). The verification checkpoint was saved with the
+    # loss-wrapped model, so weights are under model.model.<...>; we still
+    # call through model so those keys resolve, but we explicitly only run
+    # the inner ACT module.
+    inner_act = model.model  # TinyRecursiveReasoningModel_ACTV1
 
     started = time.monotonic()
     n_batches = 0
@@ -174,14 +181,19 @@ def _run_inference(
             n_batches += 1
             batch = _to_device(batch, device)
             with torch.device(device):
-                carry = model.initial_carry(batch)
+                carry = inner_act.initial_carry(batch)
             while True:
-                carry, _loss, _metrics, preds, all_finish = model(
-                    carry=carry, batch=batch, return_keys=tuple(required_outputs)
-                )
-                if all_finish:
+                carry, outputs = inner_act(carry=carry, batch=batch)
+                if carry.halted.all():
                     break
-            evaluator.update_batch(batch, preds)
+            # Build the eval-ready preds dict directly from outputs; this is
+            # the same shape ACTLossHead would have returned for the
+            # ARC evaluator's `required_outputs`.
+            preds = {
+                "preds": torch.argmax(outputs["logits"], dim=-1),
+                "q_halt_logits": outputs["q_halt_logits"],
+            }
+            evaluator.update_batch(carry.current_data, preds)
             if n_batches % 50 == 0:
                 print(f"  ...processed {n_batches} batches in {time.monotonic() - started:.1f}s")
 
@@ -267,13 +279,20 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--config", type=Path, required=True, help="all_config.yaml shipped with the checkpoint")
     p.add_argument("--data", type=Path, required=True, help="preprocessed arc2concept-aug-1000 dir")
     p.add_argument("--device", default="cuda", choices=["cuda", "mps", "cpu"])
-    p.add_argument("--batch-size", type=int, default=768)
+    p.add_argument(
+        "--batch-size",
+        type=int,
+        default=64,
+        help="default 64 is safe on T4 16GB. P100/V100/A100 can push 128–256+.",
+    )
     p.add_argument("--submission-K", type=int, default=2)
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--disable-compile", action="store_true", default=True, help="kept as no-op; we never compile here")
     args = p.parse_args(argv)
 
     os.environ.setdefault("DISABLE_COMPILE", "1")
+    # Reduce CUDA allocator fragmentation; harmless on MPS/CPU.
+    os.environ.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
 
     device = torch.device(args.device)
     print(f"[trm] device={device} checkpoint={args.checkpoint.name}")

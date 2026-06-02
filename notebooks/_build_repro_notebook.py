@@ -136,12 +136,13 @@ predictions, writes `submission.json` (Kaggle format) and `summary.json`
     (
         "code",
         """RUN_OUT = '/kaggle/working/runs/trm_repro_kaggle'
+# batch=128 fits comfortably on T4 16GB; bump to 256+ on P100/V100/A100.
 !python -m src.solver.trm_inference \\
     --checkpoint experiments/trm_arc_v2_public/step_723914 \\
     --config     experiments/trm_arc_v2_public/all_config.yaml \\
     --data       src/solver/trm/data/arc2concept-aug-1000 \\
     --device     cuda \\
-    --batch-size 768 \\
+    --batch-size 128 \\
     --out        {RUN_OUT}""",
     ),
     (
