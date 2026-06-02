@@ -174,8 +174,24 @@ def _run_inference(
     # the inner ACT module.
     inner_act = model.model  # TinyRecursiveReasoningModel_ACTV1
 
+    # Estimate total batches so the user sees a denominator, not a black box.
+    # PuzzleDataset iterates over *examples* (each puzzle in the test split
+    # contributes ~mean_puzzle_examples rows: demo pairs + test pairs all
+    # get model-forwarded). Round UP so ETA never goes negative.
+    total_examples = int(round(eval_metadata.mean_puzzle_examples * eval_metadata.total_puzzles))
+    estimated_batches = max(1, (total_examples + batch_size - 1) // batch_size)
+    print(
+        f"[trm] starting inference: {total_examples:,} rows "
+        f"({eval_metadata.total_puzzles:,} puzzles × ~{eval_metadata.mean_puzzle_examples:.1f} ex/puzzle), "
+        f"batch_size={batch_size} → ~{estimated_batches:,} batches",
+        flush=True,
+    )
+
     started = time.monotonic()
     n_batches = 0
+    # Print on batches 1, 2, 5, 10, 25, then every 50. Front-loaded prints
+    # surface OOM-vs-progress quickly; back-loaded keeps the log readable.
+    progress_milestones = {1, 2, 5, 10, 25}
     with torch.inference_mode():
         for set_name, batch, _ in iter(ds):
             n_batches += 1
@@ -186,16 +202,20 @@ def _run_inference(
                 carry, outputs = inner_act(carry=carry, batch=batch)
                 if carry.halted.all():
                     break
-            # Build the eval-ready preds dict directly from outputs; this is
-            # the same shape ACTLossHead would have returned for the
-            # ARC evaluator's `required_outputs`.
             preds = {
                 "preds": torch.argmax(outputs["logits"], dim=-1),
                 "q_halt_logits": outputs["q_halt_logits"],
             }
             evaluator.update_batch(carry.current_data, preds)
-            if n_batches % 50 == 0:
-                print(f"  ...processed {n_batches} batches in {time.monotonic() - started:.1f}s")
+            if n_batches in progress_milestones or n_batches % 50 == 0:
+                elapsed = time.monotonic() - started
+                rate = n_batches / elapsed if elapsed > 0 else 0
+                eta_s = (estimated_batches - n_batches) / rate if rate > 0 else 0
+                print(
+                    f"  ...batch {n_batches:,}/{estimated_batches:,} "
+                    f"in {elapsed:.1f}s ({rate:.2f} batch/s, ETA {eta_s/60:.1f} min)",
+                    flush=True,
+                )
 
     # ARC.result() uses dist.gather_object; we're single-process, so call the
     # post-gather aggregation directly.
