@@ -65,6 +65,9 @@ import os, subprocess
 os.chdir(WORK)
 if not os.path.isdir(f'{WORK}/repo'):
     subprocess.check_call(['git', 'clone', '--depth=1', REPO_URL, 'repo'])
+else:
+    # Already cloned — pull latest so re-runs after fixes don't need a reset.
+    subprocess.check_call(['git', '-C', f'{WORK}/repo', 'pull', '--ff-only'])
 os.chdir(f'{WORK}/repo')
 !pwd && git log -1 --oneline""",
     ),
