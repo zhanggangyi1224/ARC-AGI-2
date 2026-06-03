@@ -203,9 +203,13 @@ def _run_inference(
                 carry, outputs = inner_act(carry=carry, batch=batch)
                 if carry.halted.all():
                     break
+            # Move q_halt_logits to CPU *before* the evaluator — it does
+            # v.to(torch.float64).sigmoid() on this tensor, and MPS has no
+            # float64 support. Doing the .cpu() here is a no-op on CUDA
+            # (the evaluator would .cpu() it anyway) and unblocks MPS.
             preds = {
                 "preds": torch.argmax(outputs["logits"], dim=-1),
-                "q_halt_logits": outputs["q_halt_logits"],
+                "q_halt_logits": outputs["q_halt_logits"].cpu(),
             }
             evaluator.update_batch(carry.current_data, preds)
             if n_batches in progress_milestones or n_batches % 50 == 0:
