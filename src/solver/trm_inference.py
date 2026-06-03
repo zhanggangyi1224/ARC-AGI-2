@@ -143,6 +143,7 @@ def _run_inference(
     device: torch.device,
     batch_size: int,
     submission_K: int,
+    limit_batches: int | None = None,
 ) -> dict[str, Any]:
     ds = PuzzleDataset(
         config=PuzzleDatasetConfig(
@@ -216,6 +217,9 @@ def _run_inference(
                     f"in {elapsed:.1f}s ({rate:.2f} batch/s, ETA {eta_s/60:.1f} min)",
                     flush=True,
                 )
+            if limit_batches is not None and n_batches >= limit_batches:
+                print(f"[trm] stopping early at --limit-batches={limit_batches}", flush=True)
+                break
 
     # ARC.result() uses dist.gather_object; we're single-process, so call the
     # post-gather aggregation directly.
@@ -306,6 +310,12 @@ def main(argv: list[str] | None = None) -> int:
         help="default 64 is safe on T4 16GB. P100/V100/A100 can push 128–256+.",
     )
     p.add_argument("--submission-K", type=int, default=2)
+    p.add_argument(
+        "--limit-batches",
+        type=int,
+        default=None,
+        help="stop after this many batches (for local smoke tests; pass@K will be partial)",
+    )
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--disable-compile", action="store_true", default=True, help="kept as no-op; we never compile here")
     args = p.parse_args(argv)
@@ -333,6 +343,7 @@ def main(argv: list[str] | None = None) -> int:
         device=device,
         batch_size=args.batch_size,
         submission_K=args.submission_K,
+        limit_batches=args.limit_batches,
     )
 
     args.out.mkdir(parents=True, exist_ok=True)
